@@ -77,7 +77,7 @@ async def channels(ctx):
     await ctx.reply(embed = discord.Embed(
         title = 'Channels',
         description = '\n'.join(
-            f'{index}. {channel.mention}: `{[i async for i in channel.history(limit = 1)][0].content}`' for index, channel in enumerate(
+            f'{index}. {channel.mention}: `{await channel.fetch_message(channel.last_message_id).content}`' for index, channel in enumerate(
                 filter(
                     lambda i: i != None,
                     (
