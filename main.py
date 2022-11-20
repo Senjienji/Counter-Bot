@@ -60,7 +60,7 @@ async def on_message(message):
             'channels': []
         })
     if message.channel.id in counter_cl.find_one({'guild': message.guild.id})['channels']:
-        if not message.content.isnumeric() or int(message.content) != int([i async for i in message.channel.history(limit = 2, before = message)][1].content) + 1:
+        if not message.content.isnumeric() or int(message.content) != int([i async for i in message.channel.history(limit = 1, before = message)][0].content) + 1:
             await message.delete()
     else:
         await bot.process_commands(message)
@@ -69,7 +69,7 @@ async def on_message(message):
 async def on_message_edit(before, after):
     if after.channel.id not in counter_cl.find_one({'guild': message.guild.id})['channels'] or before.content == after.content: return
     
-    if not after.content.isnumeric() or int(message.content) != int([i async for i in after.channel.history(limit = 2, before = after)][1].content) + 1:
+    if not after.content.isnumeric() or int(message.content) != int([i async for i in after.channel.history(limit = 1, before = after)][0].content) + 1:
         await message.delete()
 
 @bot.command()
