@@ -78,7 +78,7 @@ async def channels(ctx):
         title = 'Channels',
         description = '\n'.join(
             tuple(
-                f'{index}. {channel.mention}: `{(await channel.fetch_message(channel.last_message_id)).content}`' for index, channel in enumerate(
+                f'{index}. {channel.mention}' for index, channel in enumerate(
                     filter(
                         lambda i: i != None, (
                             ctx.guild.get_channel(i) for i in counter_cl.find_one({'guild': ctx.guild.id})['channels']
