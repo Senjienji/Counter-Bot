@@ -76,17 +76,15 @@ async def on_message_edit(before, after):
 async def channels(ctx):
     await ctx.reply(embed = discord.Embed(
         title = 'Channels',
-        description = '\n'.join((
-            f'{index}. {channel.mention}: `{await channel.fetch_message(channel.last_message_id).content}`' for index, channel in enumerate(
+        description = '\n'.join(
+            f'{index}. {channel.mention}: `{channel.last_message.content}`' for index, channel in enumerate(
                 filter(
-                    lambda i: i != None,
-                    (
+                    lambda i: i != None, (
                         ctx.guild.get_channel(i) for i in counter_cl.find_one({'guild': ctx.guild.id})['channels']
                     )
-                ),
-                start = 1
+                ), start = 1
             )
-        )) or 'None',
+        ) or 'None',
         color = 0xffffff
     ).set_footer(
         text = ctx.author.display_name,
