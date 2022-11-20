@@ -132,5 +132,4 @@ async def prefix(ctx, prefix = ''):
         )
         await ctx.reply(f'prefix changed to `{bot.command_prefix(bot, ctx.message)}`')
 
-keep_alive()
 bot.run(os.environ['DISCORD_TOKEN'])
