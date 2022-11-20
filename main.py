@@ -77,14 +77,12 @@ async def channels(ctx):
     await ctx.reply(embed = discord.Embed(
         title = 'Channels',
         description = '\n'.join(
-            tuple(
-                f'{index}. {channel.mention}' for index, channel in enumerate(
-                    filter(
-                        lambda i: i != None, (
-                            ctx.guild.get_channel(i) for i in counter_cl.find_one({'guild': ctx.guild.id})['channels']
-                        )
-                    ), start = 1
-                )
+            f'{index}. {channel.mention}' for index, channel in enumerate(
+                filter(
+                    lambda i: i != None, (
+                        ctx.guild.get_channel(i) for i in counter_cl.find_one({'guild': ctx.guild.id})['channels']
+                    )
+                ), start = 1
             )
         ) or 'None',
         color = 0xffffff
