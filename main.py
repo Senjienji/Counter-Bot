@@ -1,26 +1,136 @@
-# This example requires the 'message_content' privileged intents
-
-import os
 import discord
 from discord.ext import commands
+import pymongo
+import os
 
+client = pymongo.MongoClient(
+    f'mongodb+srv://Senjienji:{os.getenv("PASSWORD")}@senjienji.czypcav.mongodb.net/?retryWrites=true&w=majority',
+    server_api = pymongo.server_api.ServerApi('1'),
+)
+db = client.db
+counter_cl = db.counter
+prefix_cl = db.prefix
 
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+class MinimalHelpCommand(commands.MinimalHelpCommand):
+    async def send_pages(self):
+        await self.context.reply(embed = discord.Embed(
+            title = 'Help',
+            description = self.paginator.pages[0],
+            color = 0xffffff
+        ).set_footer(
+            text = self.context.author.display_name,
+            icon_url = self.context.author.display_avatar.url
+        ))
 
+bot = commands.Bot(
+    command_prefix = lambda bot, message: prefix_cl.find_one({
+        'guild': message.guild.id,
+        'bot': bot.user.id
+    })['prefix'],
+    help_command = MinimalHelpCommand(),
+    allowed_mentions = discord.AllowedMentions.none(),
+    intents = discord.Intents(
+        guilds = True,
+        messages = True,
+        message_content = True
+    )
+)
+
+@bot.event
+async def on_connect():
+    print('Connected')
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    print('Ready')
+
+@bot.event
+async def on_message(message):
+    if message.guild == None: return
+    
+    if prefix_cl.find_one({'guild': message.guild.id, 'bot': bot.user.id}) == None:
+        prefix_cl.insert_one({
+            'guild': message.guild.id,
+            'bot': bot.user.id,
+            'prefix': '&'
+        })
+    if counter_cl.find_one({'guild': message.guild.id}) == None:
+        counter_cl.insert_one({
+            'guild': message.guild.id,
+            'channels': []
+        })
+    if message.channel.id in counter_cl.find_one({'guild': message.guild.id})['channels']:
+        if not message.content.isnumeric() or int(message.content) != int([i async for i in message.channel.history(limit = 2, before = message)][1].content) + 1:
+            await message.delete()
+    else:
+        await bot.process_commands(message)
+
+@bot.event
+async def on_message_edit(before, after):
+    if after.channel.id not in counter_cl.find_one({'guild': message.guild.id})['channels'] or before.content == after.content: return
+    
+    if not after.content.isnumeric() or int(message.content) != int([i async for i in after.channel.history(limit = 2, before = after)][1].content) + 1:
+        await message.delete()
 
 @bot.command()
-async def ping(ctx):
-    await ctx.send('pong')
+async def channels(ctx):
+    await ctx.reply(embed = discord.Embed(
+        title = 'Channels',
+        description = '\n'.join(
+            f"{index}. {channel.mention}: `{channel.last_message.content}`" for index, channel in enumerate(
+                filter(
+                    lambda i: i != None,
+                    (
+                        ctx.guild.get_channel(i) for i in counter_cl.find_one({'guild': ctx.guild.id})['channels']
+                    )
+                ),
+                start = 1
+            )
+        ) or 'None',
+        color = 0xffffff
+    ).set_footer(
+        text = ctx.author.display_name,
+        icon_url = ctx.author.display_avatar.url
+    ))
 
 @bot.command()
-async def hello(ctx):
-    await ctx.send("Choo choo! 🚅")
+@commands.has_guild_permissions(manage_guild = True)
+async def add(ctx, channel: discord.TextChannel):
+    channels = counter_cl.find_one({'guild': ctx.guild.id})['channels']
+    if channel.id in channels:
+        await ctx.reply(f'{channel.mention} is already added.')
+    else:
+        channels.append(channel.id)
+        counter_cl.find_one_and_update(
+            {'guild': ctx.guild.id},
+            {'$set': {'channels': channels}}
+        )
+        await ctx.reply(f'{channel.mention} added.')
 
+@bot.command()
+@commands.has_guild_permissions(manage_guild = True)
+async def remove(ctx, channel: discord.TextChannel):
+    channels = counter_cl.find_one({'guild': ctx.guild.id})['channels']
+    if channel.id in channels:
+        del channels[channel.id]
+        counter_cl.find_one_and_update(
+            {'guild': ctx.guild.id},
+            {'$set': {'channels': channels}}
+        )
+        await ctx.reply(f'{channel.mention} removed.')
+    else:
+        await ctx.reply(f'{channel.mention} not found.')
 
-bot.run(os.environ["DISCORD_TOKEN"])
+@bot.command()
+async def prefix(ctx, prefix = ''):
+    if prefix == '':
+        await ctx.reply(f'current prefix is `{bot.command_prefix(bot, ctx.message)}`')
+    elif ctx.author.guild_permissions.manage_guild:
+        prefix_cl.find_one_and_update(
+            {'guild': ctx.guild.id, 'bot': bot.user.id},
+            {'$set': {'prefix': prefix}}
+        )
+        await ctx.reply(f'prefix changed to `{bot.command_prefix(bot, ctx.message)}`')
+
+keep_alive()
+bot.run(os.environ['DISCORD_TOKEN'])
