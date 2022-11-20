@@ -76,7 +76,7 @@ async def on_message_edit(before, after):
 async def channels(ctx):
     await ctx.reply(embed = discord.Embed(
         title = 'Channels',
-        description = '\n'.join(
+        description = '\n'.join((
             f'{index}. {channel.mention}: `{await channel.fetch_message(channel.last_message_id).content}`' for index, channel in enumerate(
                 filter(
                     lambda i: i != None,
@@ -86,7 +86,7 @@ async def channels(ctx):
                 ),
                 start = 1
             )
-        ) or 'None',
+        )) or 'None',
         color = 0xffffff
     ).set_footer(
         text = ctx.author.display_name,
