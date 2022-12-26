@@ -4,7 +4,7 @@ import pymongo
 import os
 
 client = pymongo.MongoClient(
-    f'mongodb+srv://Senjienji:{os.getenv("PASSWORD")}@senjienji.czypcav.mongodb.net/?retryWrites=true&w=majority',
+    f'mongodb+srv://Senjienji:{os.environ["PASSWORD"]}@senjienji.czypcav.mongodb.net/?retryWrites=true&w=majority',
     server_api = pymongo.server_api.ServerApi('1'),
 )
 db = client.counter_bot
@@ -17,8 +17,9 @@ class MinimalHelpCommand(commands.MinimalHelpCommand):
             title = 'Help',
             description = self.paginator.pages[0],
             color = 0xffffff
-        ).set_footer(
-            text = self.context.author.display_name,
+        ).set_author(
+            name = self.context.author,
+            url = f'https://discord.com/users/{self.context.author.id}',
             icon_url = self.context.author.display_avatar.url
         ))
 
@@ -50,23 +51,70 @@ async def on_message(message):
             'guild': message.guild.id,
             'prefix': '&'
         })
-    if counter_col.find_one({'guild': message.guild.id}) == None:
-        counter_col.insert_one({
+    
+    doc = counter_col.find_one({'guild': message.guild.id})
+    if doc == None:
+        doc = {
             'guild': message.guild.id,
             'channels': []
-        })
-    if message.channel.id in counter_col.find_one({'guild': message.guild.id})['channels']:
-        if not message.content.isnumeric() or int(message.content) != int([i async for i in message.channel.history(limit = 1, before = message)][0].content) + 1:
+        }
+        counter_col.insert_one(doc)
+    
+    if message.channel.id in doc['channels']:
+        if not message.content:
             await message.delete()
+            return
+        
+        text = message.content.split()[0]
+        if not text.isnumeric():
+            await message.delete()
+            return
+        
+        history = [i async for i in message.channel.history(
+            limit = 1,
+            before = message
+        )]
+        if history:
+            count = int(history[0].content.split()[0])
+        else:
+            count = 0
+        
+        if int(text) != count + 1:
+            await message.delete()
+            return
     else:
         await bot.process_commands(message)
 
 @bot.event
 async def on_message_edit(before, after):
-    if after.channel.id not in counter_col.find_one({'guild': message.guild.id})['channels'] or before.content == after.content: return
+    if after.channel.id not in counter_col.find_one({'guild': after.guild.id})['channels']: return
     
-    if not after.content.isnumeric() or int(message.content) != int([i async for i in after.channel.history(limit = 1, before = after)][0].content) + 1:
-        await message.delete()
+    prev = int(before.content.split()[0])
+    if not after.content:
+        await after.delete()
+        return
+    
+    next_text = after.content.split()[0]
+    if next_text.isnumeric():
+        next = int(next_text)
+    else:
+        await after.delete()
+        return
+    
+    if prev == next: return
+    
+    history = [i async for i in before.channel.history(
+        limit = 1,
+        before = before
+    )]
+    if history:
+        count = int(history[0].content.split()[0])
+    else:
+        count = 0
+    
+    if next != count + 1:
+        await after.delete()
+        return
 
 @bot.command()
 async def channels(ctx):
@@ -82,23 +130,25 @@ async def channels(ctx):
                     )
                 ), start = 1
             )
-        ) or 'None',
+        ) or f'Run {bot.command_prefix(bot, ctx.message)}{add.name} <channel> to add a counting channel!',
         color = 0xffffff
-    ).set_footer(
-        text = ctx.author.display_name,
+    ).set_author(
+        name = ctx.author,
+        url = f'https://discord.com/users/{ctx.author.id}',
         icon_url = ctx.author.display_avatar.url
     ))
 
 @bot.command()
 @commands.has_guild_permissions(manage_guild = True)
 async def add(ctx, channel: discord.TextChannel):
-    channels = counter_col.find_one({'guild': ctx.guild.id})['channels']
+    doc = counter_col.find_one({'guild': ctx.guild.id})
+    channels = doc['channels']
     if channel.id in channels:
         await ctx.reply(f'{channel.mention} is already added.')
     else:
         channels.append(channel.id)
-        counter_col.find_one_and_update(
-            {'guild': ctx.guild.id},
+        counter_col.update_one(
+            {'_id': doc['_id']},
             {'$set': {'channels': channels}}
         )
         await ctx.reply(f'{channel.mention} added.')
@@ -106,11 +156,12 @@ async def add(ctx, channel: discord.TextChannel):
 @bot.command()
 @commands.has_guild_permissions(manage_guild = True)
 async def remove(ctx, channel: discord.TextChannel):
-    channels = counter_col.find_one({'guild': ctx.guild.id})['channels']
+    doc = counter_col.find_one({'guild': ctx.guild.id})
+    channels = doc['channels']
     if channel.id in channels:
         del channels[channel.id]
-        counter_col.find_one_and_update(
-            {'guild': ctx.guild.id},
+        counter_col.update_one(
+            {'_id': doc['_id']},
             {'$set': {'channels': channels}}
         )
         await ctx.reply(f'{channel.mention} removed.')
@@ -118,14 +169,14 @@ async def remove(ctx, channel: discord.TextChannel):
         await ctx.reply(f'{channel.mention} not found.')
 
 @bot.command()
-async def prefix(ctx, prefix = ''):
-    if prefix == '':
-        await ctx.reply(f'current prefix is `{bot.command_prefix(bot, ctx.message)}`')
+async def prefix(ctx, *, prefix = None):
+    if not prefix:
+        await ctx.reply(f'Current prefix is `{bot.command_prefix(bot, ctx.message)}`')
     elif ctx.author.guild_permissions.manage_guild:
-        prefix_col.find_one_and_update(
+        prefix_col.update_one(
             {'guild': ctx.guild.id},
             {'$set': {'prefix': prefix}}
         )
-        await ctx.reply(f'prefix changed to `{bot.command_prefix(bot, ctx.message)}`')
+        await ctx.reply(f'Prefix changed to `{bot.command_prefix(bot, ctx.message)}`')
 
 bot.run(os.environ['DISCORD_TOKEN'])
